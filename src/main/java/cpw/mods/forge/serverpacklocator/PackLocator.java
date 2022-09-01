@@ -1,6 +1,7 @@
 package cpw.mods.forge.serverpacklocator;
 
 import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
+import net.minecraftforge.fml.loading.moddiscovery.InvalidModFileException;
 import net.minecraftforge.forgespi.locating.IModDirectoryLocatorFactory;
 import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class PackLocator implements IModLocator {
     private static final Logger LOGGER = LogManager.getLogger();
@@ -31,19 +33,20 @@ public class PackLocator implements IModLocator {
         }
     }
     @Override
-    public List<IModFile> scanMods() {
+    public List<ModFileOrException> scanMods() {
         boolean successfulDownload = serverPackLocator.waitForDownload();
 
-        final List<IModFile> modFiles = dirLocator.scanMods();
-        final IModFile packutil = modFiles.stream()
-                .filter(modFile -> "serverpackutility.jar".equals(modFile.getFileName()))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Something went wrong with the internal utility mod"));
+        final List<ModFileOrException> modFiles = dirLocator.scanMods();
+//        final ModFileOrException packutil = modFiles.stream()
+//                .filter(modFile -> "serverpackutility.jar".equals(modFile.file().getFileName()))
+//                .findFirst()
+//                .orElseThrow(() -> new RuntimeException("Something went wrong with the internal utility mod"));
 
-        ArrayList<IModFile> finalModList = new ArrayList<>();
-        finalModList.add(packutil);
+        ArrayList<ModFileOrException> finalModList = new ArrayList<>();
+//        finalModList.add(packutil);
         if (successfulDownload) {
-            finalModList.addAll(serverPackLocator.processModList(modFiles));
+            List<IModFile> mods = serverPackLocator.processModList(modFiles.stream().map(ModFileOrException::file).collect(Collectors.toList()));
+            finalModList.addAll(mods.stream().map(m -> new ModFileOrException(m, new InvalidModFileException("Missing", m.getModFileInfo()))).collect(Collectors.toList()));
         }
 
         ModAccessor.statusLine = "ServerPack: " + (successfulDownload ? "loaded" : "NOT loaded");
@@ -79,8 +82,8 @@ public class PackLocator implements IModLocator {
 
         LOGGER.info("Unpacking utility mod from: " + targetURI.toString());
         final FileSystem thiszip = LamdbaExceptionUtils.uncheck(() -> FileSystems.newFileSystem(Paths.get(targetURI), getClass().getClassLoader()));
-        final Path utilModPath = thiszip.getPath("utilmod", "serverpackutility.jar");
-        LamdbaExceptionUtils.uncheck(()->Files.copy(utilModPath, serverModsPath.resolve("serverpackutility.jar"), StandardCopyOption.REPLACE_EXISTING));
+//        final Path utilModPath = thiszip.getPath("utilmod", "serverpackutility.jar");
+//        LamdbaExceptionUtils.uncheck(()->Files.copy(utilModPath, serverModsPath.resolve("serverpackutility.jar"), StandardCopyOption.REPLACE_EXISTING));
     }
 
     @Override

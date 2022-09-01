@@ -55,6 +55,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         }
     }
     private void handleGet(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
+        LOGGER.info(msg.headers());
         if (!msg.headers().contains("Authentication")) {
             LOGGER.warn("Received unauthenticated request.");
             build404(ctx, msg);
@@ -62,6 +63,8 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         }
 
         var hash = msg.headers().get("Authentication");
+        LOGGER.info(hash);
+        LOGGER.info(this.passwordHash);
         if (!hash.equals(this.passwordHash)) {
             LOGGER.warn("Received unauthorized request.");
             build404(ctx, msg);

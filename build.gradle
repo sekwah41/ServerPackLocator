@@ -1,16 +1,35 @@
+
+buildscript {
+    repositories {
+        maven { url 'https://files.minecraftforge.net/maven' }
+        mavenCentral()
+        maven { url 'https://modmaven.dev/' }
+        maven {
+            name "Sponge"
+            url "https://repo.spongepowered.org/repository/maven-public/"
+        }
+        maven { url = 'https://maven.parchmentmc.org' }
+    }
+    dependencies {
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
+        classpath group: 'org.spongepowered', name: 'mixingradle', version: '0.7.+'
+        classpath 'org.parchmentmc:librarian:1.+'
+    }
+
+}
+
 plugins {
-    id 'org.ajoberstar.reckon' version '0.11.0'
     id 'org.ajoberstar.grgit' version '3.1.1'
-    id 'com.github.ben-manes.versions' version '0.22.0'
+    id 'com.github.ben-manes.versions' version '0.36.0'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 apply plugin: 'maven-publish'
 apply plugin: 'jacoco'
 apply plugin: 'java-library'
+group 'net.minecraftforge'
 
-group 'cpw.mods.forge'
-
-java.toolchain.languageVersion = JavaLanguageVersion.of(16)
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 repositories {
     mavenCentral()
@@ -20,18 +39,17 @@ repositories {
         url = "https://files.minecraftforge.net/maven"
     }
 }
+configurations {
+    shade // <- Create a 'shade' configuration
+    implementation.extendsFrom(shade) // <- Add the shade configuration to implementation
+}
 
 jacoco {
     toolVersion = "0.8.2"
 }
 
-reckon {
-    scopeFromProp()
-    stageFromProp('ms', 'final')
-}
 
-reckonTagCreate.dependsOn check
-
+apply plugin: 'net.minecraftforge.gradle'
 dependencyUpdates.resolutionStrategy {
     componentSelection { rules ->
         rules.all { ComponentSelection selection ->
@@ -49,7 +67,7 @@ test {
     useJUnitPlatform()
 }
 
-ext.forge_version = "39.0.20"
+ext.forge_version = "42.0.1"
 
 ext.sharedManifest = manifest {
     attributes(['Class-Path': 'forge.jar',
@@ -83,13 +101,19 @@ task sourcesJar(type: Jar) {
     from sourceSets.main.allSource
 }
 
+minecraft {
+    mappings channel: 'official', version: '1.19.1'
+}
 
 dependencies {
-    implementation("net.minecraftforge:forgespi:4.0.9")
+    minecraft "net.minecraftforge:forge:1.19.1-42.0.0"
     implementation("cpw.mods:modlauncher:9.0.7")
     implementation("com.google.code.gson:gson:2.8.0")
     implementation("org.apache.logging.log4j:log4j-api:2.17.0")
-    implementation("io.netty:netty-all:4.1.25.Final")
+
+    shade fg.deobf('io.netty:netty-codec-http:4.1.77.Final')
+
+//    implementation("io.netty:netty-all:4.1.77.Final")
     implementation("com.electronwill.night-config:core:3.6.0")
     implementation("com.electronwill.night-config:toml:3.6.0")
     implementation("org.apache.maven:maven-artifact:3.6.3")
@@ -123,12 +147,32 @@ task serverzip(type: Zip, dependsOn: jar) {
         into("/")
     }
 }
+// Create shadowJar task
+shadowJar {
+    configurations = [project.configurations.shade] // <- Tell shadowJar to shade dependencies from 'shade'
+
+//    // Skip unnecessary assets and duplicated java files GeckoLib comes with
+//    exclude 'software/bernie/example/**'
+//    exclude 'assets/geckolib3/**'
+//    exclude '**/*.java'
+//    relocate 'software.bernie.shadowed', 'software.bernie.modid.shadowed' // <- Move the shadowed geckolib shadowed packages. This prevents classpath conflicts in runtime
+//    relocate 'software.bernie.geckolib', 'software.bernie.modid.geckolib' // <- Move the shadowed geckolib package. This prevents classpath conflicts in runtime
+
+    classifier ''
+
+    finalizedBy 'reobfShadowJar' // <- Finish shading with reobfuscation
+}
+
+
 artifacts {
     archives zip
     archives jar
     archives sourcesJar
+    archives tasks.shadowJar
 }
-
+reobf { // <- Add the output of shadowJar to reobfuscation, so shadowed content is reobfuscated
+    shadowJar {}
+}
 compileJava {
     options.compilerArgs << "-XDignore.symbol.file"
 }

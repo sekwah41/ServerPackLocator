@@ -93,10 +93,12 @@ public class ServerFileManager {
     private void generateManifest(final List<IModFile> modList) {
         LOGGER.debug("Generating manifest");
         final Map<String, List<IModFile>> filesbyfirstId = modList.stream()
+                .filter(Objects::nonNull)
                 .filter(mf -> mf.getType() == IModFile.Type.MOD)
                 .filter(mf -> !"serverpackutility.jar".equals(mf.getFileName()))
                 .collect(Collectors.groupingBy(mf -> getModInfos(mf).get(0).getModId()));
         final List<IModFile> nonModFiles = modList.stream()
+                .filter(Objects::nonNull)
           .filter(mf -> mf.getType() != IModFile.Type.MOD).toList();
 
         final ServerManifest manifest = new ServerManifest();

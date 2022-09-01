@@ -6,23 +6,23 @@
 package cpw.mods.forge.serverpackutility;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableList.Builder;
 import cpw.mods.modlauncher.Launcher;
 import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
-import cpw.mods.modlauncher.api.TypesafeMap.Key;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.fml.loading.FMLEnvironment;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraftforge.client.event.ScreenEvent.DrawScreenEvent.Pre;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLEnvironment.Keys;
+
 
 @Mod("serverpacklocatorutility")
 public class UtilityMod {
@@ -44,12 +44,12 @@ public class UtilityMod {
         }
 
         @SuppressWarnings("rawtypes")
-        static void onShowGui(Pre event) {
+        static void onShowGui(ScreenEvent.Render.Pre event) {
             if (!brandingHacked) {
                 if (event.getScreen() instanceof TitleScreen) {
                     List<String> branding = (List<String>) LamdbaExceptionUtils.uncheck(() -> (List)brandingList.get(null));
                     if (branding != null) {
-                        Builder<String> brd = ImmutableList.builder();
+                        ImmutableList.Builder<String> brd = ImmutableList.builder();
                         brd.addAll(branding);
                         brd.add(statusMessage.get());
                         LamdbaExceptionUtils.uncheck(() -> brandingList.set(null, brd.build()));
@@ -67,7 +67,7 @@ public class UtilityMod {
 
             Supplier statMessage;
             try {
-                Optional<ClassLoader> classLoader = Launcher.INSTANCE.environment().getProperty((Key)Keys.LOCATORCLASSLOADER.get());
+                Optional<ClassLoader> classLoader = Launcher.INSTANCE.environment().getProperty(FMLEnvironment.Keys.LOCATORCLASSLOADER.get());
                 Class<?> clz = LamdbaExceptionUtils.uncheck(() -> Class.forName("cpw.mods.forge.serverpacklocator.ModAccessor", true, classLoader.orElse(Thread.currentThread().getContextClassLoader())));
                 Method status = LamdbaExceptionUtils.uncheck(() -> clz.getMethod("status"));
                 statMessage = LamdbaExceptionUtils.uncheck(() -> (Supplier)status.invoke(null));
