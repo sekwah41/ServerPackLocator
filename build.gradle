@@ -67,7 +67,7 @@ test {
     useJUnitPlatform()
 }
 
-ext.forge_version = "42.0.1"
+ext.forge_version = "46.0.14"
 
 ext.sharedManifest = manifest {
     attributes(['Class-Path': 'forge.jar',
@@ -102,11 +102,11 @@ task sourcesJar(type: Jar) {
 }
 
 minecraft {
-    mappings channel: 'official', version: '1.19.1'
+    mappings channel: 'official', version: '1.20'
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:1.19.1-42.0.0"
+    minecraft "net.minecraftforge:forge:1.20-46.0.14"
     implementation("cpw.mods:modlauncher:9.0.7")
     implementation("com.google.code.gson:gson:2.8.0")
     implementation("org.apache.logging.log4j:log4j-api:2.17.0")
