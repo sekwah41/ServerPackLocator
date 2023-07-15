@@ -47,7 +47,7 @@ public class ServerSidedPackHandler extends SidedPackHandler
 
     @Override
     protected List<IModFile> processModList(List<IModFile> scannedMods) {
-        serverFileManager.parseModList(scannedMods);
+        serverFileManager.handleModList(scannedMods);
         return serverFileManager.getModList();
     }
 

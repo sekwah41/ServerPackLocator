@@ -1,5 +1,6 @@
 package cpw.mods.forge.serverpacklocator.server;
 
+import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
 import net.minecraftforge.forgespi.language.IModFileInfo;
@@ -12,7 +13,8 @@ import org.apache.maven.artifact.versioning.ArtifactVersion;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -67,69 +69,67 @@ public class ServerFileManager {
         return info.getMods();
     }
 
-    void parseModList(final List<IModFile> modList) {
-        // NOT SURE ABOUT whether I should just always generate the latest mod list or not.
-//        final Map<String, List<IModFile>> filesbyfirstId = modList.stream()
-//                .filter(mf -> mf.getType() == IModFile.Type.MOD)
-//                .collect(Collectors.groupingBy(mf -> getModInfos(mf).get(0).getModId()));
-//        final Map<String, IModFile> modFileMap = modList.stream()
-//                .collect(Collectors.toMap(IModFile::getFileName, Function.identity()));
-//        try {
-//            manifest = ServerManifest.load(manifestFile);
-//            // if there's a missing file in the manifest, regenerate it
-//            manifest.getFiles().stream().filter(md -> !modFileMap.containsKey(md.getFileName())).findAny().ifPresent(junk->this.generateManifest(modList));
-//            // if there's a new modid in the files on disk, regenerate
-//            final Set<String> knownModIds = manifest.getFiles().stream().map(ServerManifest.ModFileData::getRootModId).collect(Collectors.toSet());
-//            filesbyfirstId.keySet().stream().filter(modId -> !knownModIds.contains(modId)).findAny().ifPresent(junk->this.generateManifest(modList));
-//            this.modList = manifest.getFiles().stream()
-//                    .map(modFileData -> modFileMap.get(modFileData.getFileName()))
-//                    .collect(Collectors.toList());
-//        } catch (UncheckedIOException e) {
-//            this.generateManifest(modList);
-//        }
-        this.generateManifest(modList);
+    private static String getRootModId(IModFile modFile) {
+        return modFile.getType() == IModFile.Type.MOD ? getModInfos(modFile).get(0).getModId() : modFile.getFileName();
     }
 
-    private void generateManifest(final List<IModFile> modList) {
+    void handleModList(final List<IModFile> modList) {
+        generateManifest(modList);
+    }
+
+    private void generateManifest(final List<IModFile> files) {
         LOGGER.debug("Generating manifest");
-        final Map<String, List<IModFile>> filesbyfirstId = modList.stream()
-                .filter(Objects::nonNull)
-                .filter(mf -> mf.getType() == IModFile.Type.MOD)
-                .filter(mf -> !"serverpackutility.jar".equals(mf.getFileName()))
-                .collect(Collectors.groupingBy(mf -> getModInfos(mf).get(0).getModId()));
-        final List<IModFile> nonModFiles = modList.stream()
-                .filter(Objects::nonNull)
-          .filter(mf -> mf.getType() != IModFile.Type.MOD).toList();
 
-        final ServerManifest manifest = new ServerManifest();
-        final List<ServerManifest.ModFileData> nonModFileData = nonModFiles
-                .stream()
-                .map(ServerManifest.ModFileData::new)
-                .filter(modInfo -> !this.excludedModIds.contains(modInfo.getRootModId()))
-                .collect(Collectors.toList());
-        manifest.addAll(nonModFileData);
-        final List<ServerManifest.ModFileData> modFileDataList = filesbyfirstId.entrySet().stream()
-                .map(this::selectNewest)
-                .map(ServerManifest.ModFileData::new)
-                .filter(modInfo -> !this.excludedModIds.contains(modInfo.getRootModId()))
-                .collect(Collectors.toList());
-        manifest.addAll(modFileDataList);
-        manifest.setForgeVersion(LamdbaExceptionUtils.uncheck(this::getForgeVersion));
-        this.manifest = manifest;
-        this.manifest.save(this.manifestFile);
-        this.modList = Stream.concat(nonModFileData.stream(), modFileDataList.stream())
-                .map(ServerManifest.ModFileData::getModFile)
-                .collect(Collectors.toList());
+        modList = buildModList(files);
+
+        final ServerManifest.Builder manifest = new ServerManifest.Builder()
+                .setForgeVersion(LamdbaExceptionUtils.uncheck(this::getForgeVersion));
+
+        for (IModFile file : modList) {
+            if (file.getFileName().equals("serverpackutility.jar")) {
+                continue;
+            }
+            String checksum = FileChecksumValidator.computeChecksumFor(file.getFilePath());
+            if (checksum == null) {
+                throw new IllegalArgumentException("Invalid checksum for file " + file.getFileName());
+            }
+            manifest.add(getRootModId(file), checksum, file.getFileName());
+        }
+
+        this.manifest = manifest.build();
+        this.manifest.save(manifestFile);
     }
 
-    private IModFile selectNewest(final Map.Entry<String, List<IModFile>> modListEntry) {
-        List<IModFile> modFiles = modListEntry.getValue();
-        if (modFiles.size() > 1) {
-            LOGGER.debug("Selecting newest by artifact version for modid {}", modListEntry.getKey());
-            modFiles.sort(Comparator.<IModFile, ArtifactVersion>comparing(mf -> getModInfos(mf).get(0).getVersion()).reversed());
-            LOGGER.debug("Newest file by artifact version for modid {} is {} ({})", modListEntry.getKey(), modFiles.get(0).getFileName(), getModInfos(modFiles.get(0)).get(0).getVersion());
+    private List<IModFile> buildModList(List<IModFile> files) {
+        final Map<String, List<IModFile>> filesByRootId = files.stream().collect(Collectors.groupingBy(ServerFileManager::getRootModId));
+        excludedModIds.forEach(filesByRootId::remove);
+
+        return filesByRootId.entrySet().stream()
+                .flatMap(this::selectNewest)
+                .toList();
+    }
+
+    private Stream<IModFile> selectNewest(final Map.Entry<String, List<IModFile>> entry) {
+        List<IModFile> files = entry.getValue();
+        if (files.isEmpty()) {
+            return Stream.empty();
+        } else if (files.size() == 1) {
+            return Stream.of(files.get(0));
         }
-        return modFiles.get(0);
+        if (!files.stream().allMatch(file -> file.getType() == IModFile.Type.MOD)) {
+            return files.stream();
+        }
+
+        LOGGER.debug("Selecting newest by artifact version for modid {}", entry.getKey());
+        IModFile newestFile = files.stream()
+                .max(Comparator.comparing(ServerFileManager::getRootVersion))
+                .orElseThrow();
+        LOGGER.debug("Newest file by artifact version for modid {} is {} ({})", entry.getKey(), newestFile.getFileName(), getRootVersion(newestFile));
+        return Stream.of(newestFile);
+    }
+
+    private static ArtifactVersion getRootVersion(IModFile file) {
+        return getModInfos(file).get(0).getVersion();
     }
 
     List<IModFile> getModList() {

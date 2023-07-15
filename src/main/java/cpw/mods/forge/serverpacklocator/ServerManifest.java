@@ -1,101 +1,82 @@
 package cpw.mods.forge.serverpacklocator;
 
+import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import cpw.mods.forge.serverpacklocator.server.ServerFileManager;
-import net.minecraftforge.forgespi.locating.IModFile;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.JsonOps;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 
+import javax.annotation.Nullable;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-public class ServerManifest {
-    private static final Logger LOGGER = LogManager.getLogger();
+public record ServerManifest(String forgeVersion, List<ModFileData> files) {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private String forgeVersion;
-    private List<ModFileData> files = new ArrayList<>();
 
-    public static ServerManifest loadFromStream(final InputStream stream) {
-        return GSON.fromJson(new InputStreamReader(stream), ServerManifest.class);
-    }
+    public static final Codec<ServerManifest> CODEC = RecordCodecBuilder.create(i -> i.group(
+            Codec.STRING.fieldOf("forgeVersion").forGetter(ServerManifest::forgeVersion),
+            ModFileData.CODEC.listOf().fieldOf("files").forGetter(ServerManifest::files)
+    ).apply(i, ServerManifest::new));
 
-    public String getForgeVersion() {
-        return forgeVersion;
-    }
-
-    public void setForgeVersion(final String forgeVersion) {
-        this.forgeVersion = forgeVersion;
-    }
-
-    public List<ModFileData> getFiles() {
-        return files;
-    }
-
-    public void setFiles(final List<ModFileData> files) {
-        this.files = files;
-    }
-
-    public void addAll(final List<ModFileData> nonModFileData) {
-        files.addAll(nonModFileData);
+    public static DataResult<ServerManifest> loadFromStream(final InputStream stream) {
+        JsonElement json = JsonParser.parseReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
+        return CODEC.parse(JsonOps.INSTANCE, json);
     }
 
     public String toJson() {
-        return GSON.toJson(this);
+        JsonElement json = CODEC.encodeStart(JsonOps.INSTANCE, this).result().orElseThrow();
+        return GSON.toJson(json);
     }
 
-    public static class ModFileData {
-        private String rootModId;
-        private String checksum;
-        private String fileName;
-        private transient IModFile modFile;
-
-        public ModFileData() {
-        }
-
-        public ModFileData(final IModFile modFile) {
-            this.modFile = modFile;
-            this.rootModId = modFile.getType() == IModFile.Type.MOD ? ServerFileManager.getModInfos(modFile).get(0).getModId() : modFile.getFileName();
-            this.fileName = modFile.getFileName();
-            this.checksum = FileChecksumValidator.computeChecksumFor(modFile.getFilePath());
-            if (this.checksum == null) {
-                throw new IllegalStateException("Invalid checksum for file "+modFile.getFileName());
-            }
-        }
-
-        public String getRootModId() {
-            return this.rootModId;
-        }
-
-        public String getChecksum() {
-            return checksum;
-        }
-
-        public String getFileName() {
-            return fileName;
-        }
-
-        public IModFile getModFile() {
-            return modFile;
-        }
-    }
-
-    public static ServerManifest load(final Path path) {
-        try (BufferedReader json = Files.newBufferedReader(path)) {
-            return GSON.fromJson(json, ServerManifest.class);
+    public static DataResult<ServerManifest> load(final Path path) {
+        try (BufferedReader json = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            return CODEC.parse(JsonOps.INSTANCE, JsonParser.parseReader(json));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
     public void save(final Path path) {
-        try (BufferedWriter bufferedWriter = Files.newBufferedWriter(path)) {
-            bufferedWriter.write(toJson());
+        try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+            writer.write(toJson());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    public record ModFileData(String rootModId, String checksum, String fileName) {
+        public static final Codec<ModFileData> CODEC = RecordCodecBuilder.create(i -> i.group(
+                Codec.STRING.fieldOf("rootModId").forGetter(ModFileData::rootModId),
+                Codec.STRING.fieldOf("checksum").forGetter(ModFileData::checksum),
+                Codec.STRING.fieldOf("fileName").forGetter(ModFileData::fileName)
+        ).apply(i, ModFileData::new));
+    }
+
+    public static class Builder {
+        @Nullable
+        private String forgeVersion;
+        private final ImmutableList.Builder<ModFileData> mods = ImmutableList.builder();
+
+        public Builder setForgeVersion(String version) {
+            forgeVersion = version;
+            return this;
+        }
+
+        public Builder add(final String rootId, final String checksum, final String fileName) {
+            mods.add(new ModFileData(rootId, checksum, fileName));
+            return this;
+        }
+
+        public ServerManifest build() {
+            return new ServerManifest(Objects.requireNonNull(forgeVersion, "Forge version not set"), mods.build());
         }
     }
 }

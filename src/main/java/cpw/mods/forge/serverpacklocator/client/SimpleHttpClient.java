@@ -4,6 +4,7 @@ import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
+import net.minecraft.Util;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -11,7 +12,9 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.*;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLEncoder;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
@@ -82,7 +85,7 @@ public class SimpleHttpClient {
         connection.setRequestProperty("Authentication", this.passwordHash);
 
         try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream())) {
-            this.serverManifest = ServerManifest.loadFromStream(in);
+            this.serverManifest = Util.getOrThrow(ServerManifest.loadFromStream(in), error -> new IllegalStateException("Manifest was malformed: " + error));
         } catch (IOException e) {
             throw new IllegalStateException("Failed to download manifest", e);
         }
@@ -92,17 +95,17 @@ public class SimpleHttpClient {
 
     private void downloadFile(final String server, final ServerManifest.ModFileData next) throws IOException
     {
-        final String existingChecksum = FileChecksumValidator.computeChecksumFor(outputDir.resolve(next.getFileName()));
-        if (Objects.equals(next.getChecksum(), existingChecksum)) {
-            LOGGER.debug("Found existing file {} - skipping", next.getFileName());
+        final String existingChecksum = FileChecksumValidator.computeChecksumFor(outputDir.resolve(next.fileName()));
+        if (Objects.equals(next.checksum(), existingChecksum)) {
+            LOGGER.debug("Found existing file {} - skipping", next.fileName());
             downloadNextFile(server);
             return;
         }
 
-        final String nextFile = next.getFileName();
+        final String nextFile = next.fileName();
         LOGGER.info("Requesting file {}", nextFile);
         LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting file "+nextFile);
-        final String requestUri = server + LamdbaExceptionUtils.rethrowFunction((String f) -> URLEncoder.encode(f, StandardCharsets.UTF_8.name()))
+        final String requestUri = server + LamdbaExceptionUtils.rethrowFunction((String f) -> URLEncoder.encode(f, StandardCharsets.UTF_8))
           .andThen(s -> s.replaceAll("\\+", "%20"))
           .andThen(s -> "/files/"+s)
           .apply(nextFile);
@@ -112,7 +115,7 @@ public class SimpleHttpClient {
             URLConnection connection = new URL(requestUri).openConnection();
             connection.setRequestProperty("Authentication", this.passwordHash);
 
-            File file = outputDir.resolve(next.getFileName()).toFile();
+            File file = outputDir.resolve(next.fileName()).toFile();
 
             FileChannel download = new FileOutputStream(file).getChannel();
 
@@ -156,13 +159,13 @@ public class SimpleHttpClient {
     private void buildFileFetcher() {
         if (this.excludedModIds.isEmpty())
         {
-            fileDownloaderIterator = serverManifest.getFiles().iterator();
+            fileDownloaderIterator = serverManifest.files().iterator();
         }
         else
         {
-            fileDownloaderIterator = serverManifest.getFiles()
+            fileDownloaderIterator = serverManifest.files()
                                    .stream()
-                                   .filter(modFileData -> !this.excludedModIds.contains(modFileData.getRootModId()))
+                                   .filter(modFileData -> !this.excludedModIds.contains(modFileData.rootModId()))
                                    .iterator();
         }
 
