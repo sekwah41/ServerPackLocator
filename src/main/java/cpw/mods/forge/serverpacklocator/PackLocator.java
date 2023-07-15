@@ -5,6 +5,7 @@ import net.minecraftforge.fml.loading.moddiscovery.InvalidModFileException;
 import net.minecraftforge.forgespi.locating.IModDirectoryLocatorFactory;
 import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
+import net.minecraftforge.forgespi.locating.ModFileLoadingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -36,17 +37,29 @@ public class PackLocator implements IModLocator {
     public List<ModFileOrException> scanMods() {
         boolean successfulDownload = serverPackLocator.waitForDownload();
 
-        final List<ModFileOrException> modFiles = dirLocator.scanMods();
+        final List<ModFileOrException> scannedMods = dirLocator.scanMods();
 //        final ModFileOrException packutil = modFiles.stream()
 //                .filter(modFile -> "serverpackutility.jar".equals(modFile.file().getFileName()))
 //                .findFirst()
 //                .orElseThrow(() -> new RuntimeException("Something went wrong with the internal utility mod"));
 
-        ArrayList<ModFileOrException> finalModList = new ArrayList<>();
+        final List<ModFileOrException> finalModList = new ArrayList<>();
 //        finalModList.add(packutil);
         if (successfulDownload) {
-            List<IModFile> mods = serverPackLocator.processModList(modFiles.stream().map(ModFileOrException::file).collect(Collectors.toList()));
-            finalModList.addAll(mods.stream().map(m -> new ModFileOrException(m, new InvalidModFileException("Missing", m.getModFileInfo()))).collect(Collectors.toList()));
+            List<IModFile> mods = new ArrayList<>(scannedMods.size());
+            for (ModFileOrException scannedMod : scannedMods) {
+                if (scannedMod.file() != null) {
+                    mods.add(scannedMod.file());
+                }
+                if (scannedMod.ex() != null) {
+                    finalModList.add(scannedMod);
+                }
+            }
+            for (IModFile modFile : serverPackLocator.processModList(mods)) {
+                finalModList.add(new ModFileOrException(modFile, null));
+            }
+        } else {
+            finalModList.add(new ModFileOrException(null, new ModFileLoadingException("Failed to download server pack")));
         }
 
         ModAccessor.statusLine = "ServerPack: " + (successfulDownload ? "loaded" : "NOT loaded");
