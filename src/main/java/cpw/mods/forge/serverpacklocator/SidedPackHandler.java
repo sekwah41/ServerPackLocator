@@ -2,6 +2,9 @@ package cpw.mods.forge.serverpacklocator;
 
 import com.electronwill.nightconfig.core.ConfigFormat;
 import com.electronwill.nightconfig.core.file.FileConfig;
+import cpw.mods.forge.serverpacklocator.client.ClientSidedPackHandler;
+import cpw.mods.forge.serverpacklocator.server.ServerSidedPackHandler;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
 
@@ -12,7 +15,7 @@ import java.util.List;
 public abstract class SidedPackHandler {
     private final Path serverModsDir;
     private final FileConfig packConfig;
-    private boolean isValid;
+    private final boolean isValid;
     private String forgeVersion = "UNKNOWN";
     private String mcVersion = "UNKNOWN";
 
@@ -24,8 +27,15 @@ public abstract class SidedPackHandler {
                 .build();
         packConfig.load();
         packConfig.close();
-        this.isValid = validateConfig();
+        isValid = validateConfig();
         ModAccessor.needsCertificate = !this.isValid;
+    }
+
+    public static SidedPackHandler buildFor(Dist side, final Path serverModsPath) {
+        return switch (side) {
+            case CLIENT -> new ClientSidedPackHandler(serverModsPath);
+            case DEDICATED_SERVER -> new ServerSidedPackHandler(serverModsPath);
+        };
     }
 
     protected abstract boolean validateConfig();
