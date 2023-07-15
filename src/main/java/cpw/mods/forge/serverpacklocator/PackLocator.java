@@ -1,7 +1,5 @@
 package cpw.mods.forge.serverpacklocator;
 
-import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
-import net.minecraftforge.fml.loading.moddiscovery.InvalidModFileException;
 import net.minecraftforge.forgespi.locating.IModDirectoryLocatorFactory;
 import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
@@ -9,14 +7,12 @@ import net.minecraftforge.forgespi.locating.ModFileLoadingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.URI;
 import java.net.URL;
-import java.nio.file.*;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 public class PackLocator implements IModLocator {
     private static final Logger LOGGER = LogManager.getLogger();
@@ -33,18 +29,14 @@ public class PackLocator implements IModLocator {
             LOGGER.warn("The server pack locator is not in a valid state, it will not load any mods");
         }
     }
+
     @Override
     public List<ModFileOrException> scanMods() {
         boolean successfulDownload = serverPackLocator.waitForDownload();
 
         final List<ModFileOrException> scannedMods = dirLocator.scanMods();
-//        final ModFileOrException packutil = modFiles.stream()
-//                .filter(modFile -> "serverpackutility.jar".equals(modFile.file().getFileName()))
-//                .findFirst()
-//                .orElseThrow(() -> new RuntimeException("Something went wrong with the internal utility mod"));
 
         final List<ModFileOrException> finalModList = new ArrayList<>();
-//        finalModList.add(packutil);
         if (successfulDownload) {
             List<IModFile> mods = new ArrayList<>(scannedMods.size());
             for (ModFileOrException scannedMod : scannedMods) {
@@ -81,22 +73,15 @@ public class PackLocator implements IModLocator {
         final IModDirectoryLocatorFactory modFileLocator = LaunchEnvironmentHandler.INSTANCE.getModFolderFactory();
         dirLocator = modFileLocator.build(serverModsPath, "serverpack");
 
-        serverPackLocator.setForgeVersion((String)arguments.get("forgeVersion"));
-        serverPackLocator.setMcVersion((String)arguments.get("mcVersion"));
+        serverPackLocator.setForgeVersion((String) arguments.get("forgeVersion"));
+        serverPackLocator.setMcVersion((String) arguments.get("mcVersion"));
 
         if (serverPackLocator.isValid()) {
             serverPackLocator.initialize(dirLocator);
         }
 
         URL url = getClass().getProtectionDomain().getCodeSource().getLocation();
-
         LOGGER.info("Loading server pack locator from: " + url.toString());
-        URI targetURI = LamdbaExceptionUtils.uncheck(() -> new URI("file://"+LamdbaExceptionUtils.uncheck(url::toURI).getRawSchemeSpecificPart().split("!")[0].split("\\.jar")[0] + ".jar"));
-
-        LOGGER.info("Unpacking utility mod from: " + targetURI.toString());
-        final FileSystem thiszip = LamdbaExceptionUtils.uncheck(() -> FileSystems.newFileSystem(Paths.get(targetURI), getClass().getClassLoader()));
-//        final Path utilModPath = thiszip.getPath("utilmod", "serverpackutility.jar");
-//        LamdbaExceptionUtils.uncheck(()->Files.copy(utilModPath, serverModsPath.resolve("serverpackutility.jar"), StandardCopyOption.REPLACE_EXISTING));
     }
 
     @Override

@@ -1,5 +1,6 @@
 package cpw.mods.forge.serverpacklocator.server;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -24,8 +25,14 @@ public class SimpleHttpServer {
     }
 
     public static void run(ServerSidedPackHandler handler, final String password) {
-        EventLoopGroup masterGroup = new NioEventLoopGroup(1, (Runnable r) -> newDaemonThread("ServerPack Locator Master - ", r));
-        EventLoopGroup slaveGroup = new NioEventLoopGroup(1, (Runnable r) -> newDaemonThread("ServerPack Locator Slave - ", r));
+        EventLoopGroup masterGroup = new NioEventLoopGroup(1, new ThreadFactoryBuilder()
+                .setNameFormat("ServerPack Locator Master - %d")
+                .setDaemon(true)
+                .build());
+        EventLoopGroup slaveGroup = new NioEventLoopGroup(1,new ThreadFactoryBuilder()
+                .setNameFormat("ServerPack Locator Slave - %d")
+                .setDaemon(true)
+                .build());
 
         int port = handler.getConfig().getOptionalInt("server.port").orElse(8443);
         final ServerBootstrap bootstrap = new ServerBootstrap()
@@ -53,13 +60,5 @@ public class SimpleHttpServer {
                 .option(ChannelOption.SO_BACKLOG, 128)
                 .childOption(ChannelOption.SO_KEEPALIVE, true);
         bootstrap.bind(port).syncUninterruptibly();
-    }
-
-    private static final AtomicInteger COUNT = new AtomicInteger(1);
-    static Thread newDaemonThread(final String namePrefix, Runnable task) {
-        Thread t = new Thread(task);
-        t.setName(namePrefix + COUNT.getAndIncrement());
-        t.setDaemon(true);
-        return t;
     }
 }
