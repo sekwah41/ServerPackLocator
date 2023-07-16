@@ -28,8 +28,8 @@ public record ServerManifest(String forgeVersion, List<ModFileData> files) {
             ModFileData.CODEC.listOf().fieldOf("files").forGetter(ServerManifest::files)
     ).apply(i, ServerManifest::new));
 
-    public static DataResult<ServerManifest> loadFromStream(final InputStream stream) {
-        JsonElement json = JsonParser.parseReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
+    public static DataResult<ServerManifest> parse(final String string) {
+        JsonElement json = JsonParser.parseString(string);
         return CODEC.parse(JsonOps.INSTANCE, json);
     }
 

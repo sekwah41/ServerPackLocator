@@ -1,130 +1,112 @@
 package cpw.mods.forge.serverpacklocator.client;
 
+import com.google.common.collect.Iterators;
 import com.google.common.hash.HashCode;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.mojang.serialization.DataResult;
 import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
-import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.net.URL;
-import java.net.URLConnection;
+import javax.annotation.Nullable;
+import java.net.URI;
 import java.net.URLEncoder;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 public class SimpleHttpClient {
     private static final Logger LOGGER = LogManager.getLogger();
-    private final Path outputDir;
-    private ServerManifest serverManifest;
-    private Iterator<ServerManifest.ModFileData> fileDownloaderIterator;
-    private final Future<Boolean> downloadJob;
-    private final List<String> excludedModIds;
 
-    public SimpleHttpClient(final ClientSidedPackHandler packHandler, final List<String> excludedModIds) {
+    private static final Executor EXECUTOR = Executors.newFixedThreadPool(2, new ThreadFactoryBuilder()
+            .setNameFormat("ServerPackLocator HTTP Client - %d")
+            .setDaemon(true)
+            .build());
+
+    private static final String USER_AGENT = "ServerPackLocator (https://github.com/LoveTropics/serverpacklocator)";
+
+    private final HttpClient client = HttpClient.newBuilder()
+            .executor(EXECUTOR)
+            .build();
+
+    private final Path outputDir;
+    private final CompletableFuture<ServerManifest> downloadJob;
+    private final Set<String> excludedModIds;
+
+    public SimpleHttpClient(final ClientSidedPackHandler packHandler, final Set<String> excludedModIds) {
         this.outputDir = packHandler.getServerModsDir();
         this.excludedModIds = excludedModIds;
 
-        final Optional<String> remoteServer = packHandler.getConfig().getOptional("client.remoteServer");
-        downloadJob = Executors.newSingleThreadExecutor().submit(() -> remoteServer
-          .map(server -> server.endsWith("/") ? server.substring(0, server.length() - 1) : server)
-          .map(this::connectAndDownload).orElse(false));
+        final Optional<String> remoteServer = packHandler.getConfig().<String>getOptional("client.remoteServer")
+                .map(server -> server.endsWith("/") ? server.substring(0, server.length() - 1) : server);
+        downloadJob = remoteServer.map(this::connectAndDownload)
+                .orElse(CompletableFuture.completedFuture(null));
     }
 
-    private boolean connectAndDownload(final String server) {
-        try {
-            downloadManifest(server);
-            downloadNextFile(server);
-            return true;
-        } catch (Exception ex) {
-            LOGGER.error("Failed to download modpack from server: " + server, ex);
-            return false;
-        }
+    private CompletableFuture<ServerManifest> connectAndDownload(final String host) {
+        return downloadManifest(host).thenCompose(manifest -> {
+            List<ServerManifest.ModFileData> filesToDownload = manifest.files().stream()
+                    .filter(file -> !excludedModIds.contains(file.rootModId()))
+                    .toList();
+            LOGGER.debug("Downloading {} of {} files from manifest", filesToDownload.size(), manifest.files().size());
+
+            return sequential(Iterators.transform(filesToDownload.iterator(), file -> downloadFile(host, file))).thenApply(unused -> {
+                LOGGER.debug("Finished downloading files");
+                return manifest;
+            });
+        });
     }
 
-    protected void downloadManifest(final String serverHost) throws IOException
-    {
-        var address = serverHost + "/servermanifest.json";
-
-        LOGGER.info("Requesting server manifest from: " + serverHost);
-        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting server manifest from: " + serverHost);
-
-        var url = new URL(address);
-        var connection = url.openConnection();
-
-        try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream())) {
-            DataResult<ServerManifest> result = ServerManifest.loadFromStream(in);
-            this.serverManifest = result.result().orElseThrow(() -> new IllegalStateException("Manifest was malformed: " + result.error().orElseThrow()));
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to download manifest", e);
+    private static CompletableFuture<?> sequential(final Iterator<CompletableFuture<?>> iterator) {
+        if (iterator.hasNext()) {
+            return iterator.next().thenCompose(unused -> sequential(iterator));
         }
-        LOGGER.debug("Received manifest");
-        buildFileFetcher();
+        return CompletableFuture.completedFuture(null);
     }
 
-    private void downloadFile(final String server, final ServerManifest.ModFileData next) throws IOException
-    {
-        final HashCode existingChecksum = FileChecksumValidator.computeChecksumFor(resolvePath(next));
-        if (Objects.equals(next.checksum(), existingChecksum)) {
-            LOGGER.debug("Found existing file {} - skipping", next.fileName());
-            downloadNextFile(server);
-            return;
+    private CompletableFuture<ServerManifest> downloadManifest(final String host) {
+        LOGGER.info("Requesting server manifest from: {}", host);
+        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting server manifest from: " + host);
+
+        HttpRequest request = HttpRequest.newBuilder(URI.create(host + "/servermanifest.json"))
+                .header("User-Agent", USER_AGENT)
+                .GET()
+                .build();
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                .thenApply(SimpleHttpClient::parseManifest);
+    }
+
+    private static ServerManifest parseManifest(HttpResponse<String> response) {
+        DataResult<ServerManifest> result = ServerManifest.parse(response.body());
+        return result.result().orElseThrow(() -> new IllegalStateException("Manifest was malformed: " + result.error().orElseThrow()));
+    }
+
+    private CompletableFuture<?> downloadFile(final String host, final ServerManifest.ModFileData modFile) {
+        final Path targetPath = resolvePath(modFile);
+
+        final HashCode existingChecksum = FileChecksumValidator.computeChecksumFor(targetPath);
+        if (Objects.equals(modFile.checksum(), existingChecksum)) {
+            LOGGER.debug("Found existing file {} - skipping", modFile.fileName());
+            return CompletableFuture.completedFuture(null);
         }
 
-        final String nextFile = next.fileName();
-        LOGGER.info("Requesting file {}", nextFile);
-        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting file "+nextFile);
-        final String requestUri = server + LamdbaExceptionUtils.rethrowFunction((String f) -> URLEncoder.encode(f, StandardCharsets.UTF_8))
-          .andThen(s -> s.replaceAll("\\+", "%20"))
-          .andThen(s -> "/files/"+s)
-          .apply(nextFile);
+        final String fileName = modFile.fileName();
+        LOGGER.info("Requesting file: {}", fileName);
+        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting file: " + fileName);
 
-        try
-        {
-            URLConnection connection = new URL(requestUri).openConnection();
-
-            File file = resolvePath(next).toFile();
-
-            FileChannel download = new FileOutputStream(file).getChannel();
-
-            long totalBytes = connection.getContentLengthLong(), time = System.nanoTime(), between, length;
-            int percent;
-
-            ReadableByteChannel channel = Channels.newChannel(connection.getInputStream());
-
-            while (download.transferFrom(channel, file.length(), 1024) > 0)
-            {
-                between = System.nanoTime() - time;
-
-                if (between < 1000000000) continue;
-
-                length = file.length();
-
-                percent = (int) ((double) length / ((double) totalBytes == 0.0 ? 1.0 : (double) totalBytes) * 100.0);
-
-                LOGGER.info("Downloaded {}% of {}", percent, nextFile);
-                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloaded " + percent + "% of " + nextFile);
-
-                time = System.nanoTime();
-            }
-
-            downloadNextFile(server);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to download file: " + nextFile, ex);
-        }
+        final URI uri = URI.create(host + "/files/" + URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20"));
+        final HttpRequest request = HttpRequest.newBuilder(uri)
+                .header("User-Agent", USER_AGENT)
+                .GET()
+                .build();
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofFile(targetPath))
+                .thenAccept(response -> LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Finished downloading file: " + fileName));
     }
 
     private Path resolvePath(final ServerManifest.ModFileData modFile) {
@@ -135,40 +117,13 @@ public class SimpleHttpClient {
         return path;
     }
 
-    private void downloadNextFile(final String server) throws IOException
-    {
-        final Iterator<ServerManifest.ModFileData> fileDataIterator = fileDownloaderIterator;
-        if (fileDataIterator.hasNext()) {
-            downloadFile(server, fileDataIterator.next());
-        } else {
-            LOGGER.info("Finished downloading closing channel");
-        }
-    }
-
-    private void buildFileFetcher() {
-        if (this.excludedModIds.isEmpty())
-        {
-            fileDownloaderIterator = serverManifest.files().iterator();
-        }
-        else
-        {
-            fileDownloaderIterator = serverManifest.files()
-                                   .stream()
-                                   .filter(modFileData -> !this.excludedModIds.contains(modFileData.rootModId()))
-                                   .iterator();
-        }
-
-    }
-
-    boolean waitForResult() throws ExecutionException {
+    @Nullable
+    ServerManifest waitForResult() {
         try {
-            return downloadJob.get();
-        } catch (InterruptedException e) {
-            return false;
+            return downloadJob.join();
+        } catch (Throwable t) {
+            LOGGER.error("Encountered an exception while downloading server mods", t);
+            return null;
         }
-    }
-
-    public ServerManifest getManifest() {
-        return this.serverManifest;
     }
 }

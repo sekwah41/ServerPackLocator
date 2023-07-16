@@ -1,7 +1,6 @@
 package cpw.mods.forge.serverpacklocator.client;
 
 import com.electronwill.nightconfig.core.ConfigFormat;
-import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.forge.serverpacklocator.SidedPackHandler;
 import net.minecraftforge.forgespi.locating.IModFile;
@@ -9,16 +8,18 @@ import net.minecraftforge.forgespi.locating.IModLocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 public class ClientSidedPackHandler extends SidedPackHandler {
     private static final Logger LOGGER = LogManager.getLogger();
     private SimpleHttpClient clientDownloader;
+    @Nullable
+    private ServerManifest manifest;
 
     public ClientSidedPackHandler(final Path serverModsDir) {
         super(serverModsDir);
@@ -44,7 +45,10 @@ public class ClientSidedPackHandler extends SidedPackHandler {
 
     @Override
     protected List<IModFile> processModList(List<IModFile> scannedMods) {
-        final Set<String> manifestFileList = clientDownloader.getManifest().files()
+        if (manifest == null) {
+            return List.of();
+        }
+        final Set<String> manifestFileList = manifest.files()
                 .stream()
                 .map(ServerManifest.ModFileData::fileName)
                 .collect(Collectors.toSet());
@@ -57,13 +61,9 @@ public class ClientSidedPackHandler extends SidedPackHandler {
     protected boolean waitForDownload() {
         if (!isValid()) return false;
 
-        try {
-            if (!clientDownloader.waitForResult()) {
-                LOGGER.info("There was a problem with the connection, there will not be any server mods");
-                return false;
-            }
-        } catch (ExecutionException e) {
-            LOGGER.error("Caught exception downloading mods from server", e);
+        manifest = clientDownloader.waitForResult();
+        if (manifest == null) {
+            LOGGER.info("There was a problem with the connection, there will not be any server mods");
             return false;
         }
         return true;
@@ -71,9 +71,7 @@ public class ClientSidedPackHandler extends SidedPackHandler {
 
     @Override
     public void initialize(final IModLocator dirLocator) {
-        clientDownloader = new SimpleHttpClient(
-          this,
-          getConfig().<List<String>>getOptional("client.excludedModIds").orElse(Collections.emptyList())
-          );
+        List<String> excludedModIds = getConfig().<List<String>>getOptional("client.excludedModIds").orElse(List.of());
+        clientDownloader = new SimpleHttpClient(this, Set.copyOf(excludedModIds));
     }
 }
