@@ -11,6 +11,8 @@ This fork of SPL is designed to not require authentication. This works great for
 
 ## Setup
 
+Example configs have been provided in the Docs/ directory of this repo.
+
 ### Server
 
 1. Drop serverpacklocator.jar into the `mods/` folder of your Forge server.
@@ -25,5 +27,5 @@ This fork of SPL is designed to not require authentication. This works great for
 ## Notes
 
 - You MUST use HTTPS with a valid TLS certificate. The cheapest (free) way to do this is setting up with Let's Encrypt & a domain from a Dynamic DNS provider.
-- Currently, SPL is unable to host its own HTTPS server. A config for Caddy has been included as a stopgap solution, but if you already have a webserver, point a subdomain to the `servermods/` folder.
+- Currently, SPL is unable to host its own HTTPS server. A config for Caddy has been included as a stopgap solution.
 - Mods put into `servermods/` will be loaded on the Client AND the Server. Don't put any client-only or server-only mods in there!

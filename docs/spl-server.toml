@@ -1,0 +1,6 @@
+# Put this file at servermods/serverpacklocator.toml
+[server]
+# Enter a port to listen on. This isn't actually used at the moment.
+port = 38080
+# The server password. This also isn't used.
+password = "a"
