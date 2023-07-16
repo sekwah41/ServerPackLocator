@@ -1,5 +1,6 @@
 package cpw.mods.forge.serverpacklocator.server;
 
+import com.google.common.hash.HashCode;
 import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
@@ -89,7 +90,7 @@ public class ServerFileManager {
             if (file.getFileName().equals("serverpackutility.jar")) {
                 continue;
             }
-            String checksum = FileChecksumValidator.computeChecksumFor(file.getFilePath());
+            HashCode checksum = FileChecksumValidator.computeChecksumFor(file.getFilePath());
             if (checksum == null) {
                 throw new IllegalArgumentException("Invalid checksum for file " + file.getFileName());
             }

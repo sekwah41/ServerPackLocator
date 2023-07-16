@@ -1,6 +1,7 @@
 package cpw.mods.forge.serverpacklocator;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.hash.HashCode;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -16,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 public record ServerManifest(String forgeVersion, List<ModFileData> files) {
@@ -52,10 +54,21 @@ public record ServerManifest(String forgeVersion, List<ModFileData> files) {
         }
     }
 
-    public record ModFileData(String rootModId, String checksum, String fileName) {
+    public record ModFileData(String rootModId, HashCode checksum, String fileName) {
+        private static final Codec<HashCode> HASH_CODE_CODEC = Codec.STRING.comapFlatMap(
+                string -> {
+                    try {
+                        return DataResult.success(HashCode.fromString(string.toLowerCase(Locale.ROOT)));
+                    } catch (Exception e) {
+                        return DataResult.error(e::getMessage);
+                    }
+                },
+                hash -> hash.toString().toUpperCase(Locale.ROOT)
+        );
+
         public static final Codec<ModFileData> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.STRING.fieldOf("rootModId").forGetter(ModFileData::rootModId),
-                Codec.STRING.fieldOf("checksum").forGetter(ModFileData::checksum),
+                HASH_CODE_CODEC.fieldOf("checksum").forGetter(ModFileData::checksum),
                 Codec.STRING.fieldOf("fileName").forGetter(ModFileData::fileName)
         ).apply(i, ModFileData::new));
     }
@@ -70,7 +83,7 @@ public record ServerManifest(String forgeVersion, List<ModFileData> files) {
             return this;
         }
 
-        public Builder add(final String rootId, final String checksum, final String fileName) {
+        public Builder add(final String rootId, final HashCode checksum, final String fileName) {
             mods.add(new ModFileData(rootId, checksum, fileName));
             return this;
         }

@@ -1,5 +1,6 @@
 package cpw.mods.forge.serverpacklocator.client;
 
+import com.google.common.hash.HashCode;
 import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
@@ -95,7 +96,7 @@ public class SimpleHttpClient {
 
     private void downloadFile(final String server, final ServerManifest.ModFileData next) throws IOException
     {
-        final String existingChecksum = FileChecksumValidator.computeChecksumFor(outputDir.resolve(next.fileName()));
+        final HashCode existingChecksum = FileChecksumValidator.computeChecksumFor(outputDir.resolve(next.fileName()));
         if (Objects.equals(next.checksum(), existingChecksum)) {
             LOGGER.debug("Found existing file {} - skipping", next.fileName());
             downloadNextFile(server);
