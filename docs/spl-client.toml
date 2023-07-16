@@ -1,4 +1,4 @@
 # Put this file at servermods/serverpacklocator.toml
 [client]
 # The URL of the minecraft server you wish to fetch mods from.
-remoteServer = "https://subdomain.example.com/"
+remoteServer = "https://subdomain.example.com:8080/"

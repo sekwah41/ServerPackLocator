@@ -1,13 +1,18 @@
 package cpw.mods.forge.serverpacklocator.server;
 
 import com.electronwill.nightconfig.core.ConfigFormat;
+import com.electronwill.nightconfig.core.file.FileConfig;
 import cpw.mods.forge.serverpacklocator.SidedPackHandler;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -51,9 +56,28 @@ public class ServerSidedPackHandler extends SidedPackHandler {
 
     @Override
     public void initialize(final IModLocator dirLocator) {
-        int port = getConfig().getOptionalInt("server.port").orElse(8443);
-        List<String> excludedModIds = getConfig().<List<String>>getOptional("server.excludedModIds").orElse(List.of());
+        FileConfig config = getConfig();
+        int port = config.getOptionalInt("server.port").orElse(8443);
+        List<String> excludedModIds = config.<List<String>>getOptional("server.excludedModIds").orElse(List.of());
+        SslContext sslContext = buildSslContext(config.get("server.ssl.certificateChainFile"), config.get("server.ssl.keyFile"));
+
         serverFileManager = new ServerFileManager(this, excludedModIds);
-        SimpleHttpServer.run(serverFileManager, port);
+        SimpleHttpServer.run(serverFileManager, port, sslContext);
+    }
+
+    @Nullable
+    private static SslContext buildSslContext(@Nullable final String certificateChainFile, @Nullable final String keyFile) {
+        if (certificateChainFile == null || keyFile == null) {
+            return null;
+        }
+        try (
+                final InputStream certificateChain = Files.newInputStream(Path.of(certificateChainFile));
+                final InputStream key = Files.newInputStream(Path.of(keyFile))
+        ) {
+            return SslContextBuilder.forServer(certificateChain, key).build();
+        } catch (final Exception e) {
+            LOGGER.error("Failed to initialize SSL context for server", e);
+        }
+        return null;
     }
 }

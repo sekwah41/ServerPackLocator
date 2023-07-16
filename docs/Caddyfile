@@ -1,5 +1,0 @@
-subdomain.example.com
-
-root * /path/to/servermods
-uri strip_prefix /files
-file_server

@@ -27,6 +27,5 @@ Example configs have been provided in the Docs/ directory of this repo.
 ## Notes
 
 - You MUST use HTTPS with a valid TLS certificate. The cheapest (free) way to do this is setting up with Let's Encrypt & a domain from a Dynamic DNS provider.
-- Currently, SPL is unable to host its own HTTPS server. A config for Caddy has been included as a stopgap solution.
 - Mods put into `servermods/` will be loaded on the Client AND the Server. Don't put any client-only or server-only mods in there!
 - If there are multiple versions of mods in a directory, Forge will only load the latest version. Additionally, SPL will only add the latest version to the manifest, so no need to worry about clearing older versions out!

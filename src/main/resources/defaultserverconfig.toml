@@ -1,3 +1,8 @@
 [server]
 # Enter a port to listen on. This will be serving public HTTP requests.
 port = 8080
+
+# If present, enforces the server to serve over HTTPS.
+[server.ssl]
+certificateChainFile = "fullchain.pem"
+keyFile = "privkey.pem"

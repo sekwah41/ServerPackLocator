@@ -2,15 +2,21 @@ package cpw.mods.forge.serverpacklocator.server;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.*;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.ssl.SslContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import javax.annotation.Nullable;
 
 /**
  * Simple Http Server for serving file and manifest requests to clients.
@@ -32,7 +38,7 @@ public class SimpleHttpServer {
         throw new IllegalArgumentException("Can not instantiate SimpleHttpServer.");
     }
 
-    public static void run(final ServerFileManager fileManager, final int port) {
+    public static void run(final ServerFileManager fileManager, final int port, @Nullable final SslContext sslContext) {
         final ServerBootstrap bootstrap = new ServerBootstrap()
                 .group(PARENT_GROUP, CHILD_GROUP)
                 .channel(NioServerSocketChannel.class)
@@ -50,6 +56,9 @@ public class SimpleHttpServer {
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(final SocketChannel channel) {
+                        if (sslContext != null) {
+                            channel.pipeline().addLast("ssl", sslContext.newHandler(channel.alloc()));
+                        }
                         channel.pipeline().addLast("codec", new HttpServerCodec());
                         channel.pipeline().addLast("aggregator", new HttpObjectAggregator(MAX_CONTENT_LENGTH));
                         channel.pipeline().addLast("request", new RequestHandler(fileManager));
