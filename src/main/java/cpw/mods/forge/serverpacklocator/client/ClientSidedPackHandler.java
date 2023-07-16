@@ -32,15 +32,7 @@ public class ClientSidedPackHandler extends SidedPackHandler {
 
     @Override
     protected boolean validateConfig() {
-        final String uuid = LaunchEnvironmentHandler.INSTANCE.getUUID();
-        if (uuid == null || uuid.length() == 0) {
-            // invalid UUID - probably offline mode. not supported
-            LaunchEnvironmentHandler.INSTANCE.addProgressMessage("NO UUID found. Offline mode does not work. No server mods will be downloaded");
-            LOGGER.error("There was not a valid UUID present in this client launch. You are probably playing offline mode. Trivially, there is nothing for us to do.");
-            return false;
-        }
         final Optional<String> remoteServer = getConfig().getOptional("client.remoteServer");
-
         if (remoteServer.isEmpty()) {
             LOGGER.fatal("Invalid configuration file {} found. Could not locate remove server address. " +
                     "Repair or delete this file to continue", getConfig().getNioPath().toString());

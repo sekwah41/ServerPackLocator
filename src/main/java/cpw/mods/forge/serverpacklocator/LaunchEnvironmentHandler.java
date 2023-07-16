@@ -31,10 +31,6 @@ public class LaunchEnvironmentHandler {
         return getValue(IEnvironment.Keys.GAMEDIR).orElseGet(()-> Paths.get("."));
     }
 
-    public String getUUID() {
-        return getValue(IEnvironment.Keys.UUID).orElse("");
-    }
-
     Dist getDist() {
         return getValue(net.minecraftforge.forgespi.Environment.Keys.DIST).orElse(Dist.CLIENT);
     }
