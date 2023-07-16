@@ -94,7 +94,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     }
 
     private void buildFileReply(final ChannelHandlerContext ctx, final FullHttpRequest msg, final String fileName, final byte[] file) {
-        final ByteBuf content = Unpooled.copiedBuffer(file);
+        final ByteBuf content = Unpooled.wrappedBuffer(file);
         FullHttpResponse resp = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, content);
         HttpUtil.setKeepAlive(resp, HttpUtil.isKeepAlive(msg));
         resp.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");

@@ -11,6 +11,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -46,9 +47,15 @@ public class ServerFileManager {
         return manifest.toJson();
     }
 
+    @Nullable
     byte[] findFile(final String fileName) {
         try {
-            return Files.readAllBytes(modsDir.resolve(fileName));
+            Path path = modsDir.resolve(fileName).normalize();
+            if (!modsDir.equals(path.getParent())) {
+                LOGGER.warn("Requested mod file not in servermods directory: {}", fileName);
+                return null;
+            }
+            return Files.readAllBytes(path);
         } catch (IOException e) {
             LOGGER.warn("Failed to read file {}", fileName);
             return null;

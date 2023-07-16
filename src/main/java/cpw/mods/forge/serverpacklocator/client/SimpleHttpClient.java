@@ -21,8 +21,6 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -78,7 +76,7 @@ public class SimpleHttpClient {
 
     private void downloadFile(final String server, final ServerManifest.ModFileData next) throws IOException
     {
-        final HashCode existingChecksum = FileChecksumValidator.computeChecksumFor(outputDir.resolve(next.fileName()));
+        final HashCode existingChecksum = FileChecksumValidator.computeChecksumFor(resolvePath(next));
         if (Objects.equals(next.checksum(), existingChecksum)) {
             LOGGER.debug("Found existing file {} - skipping", next.fileName());
             downloadNextFile(server);
@@ -97,7 +95,7 @@ public class SimpleHttpClient {
         {
             URLConnection connection = new URL(requestUri).openConnection();
 
-            File file = outputDir.resolve(next.fileName()).toFile();
+            File file = resolvePath(next).toFile();
 
             FileChannel download = new FileOutputStream(file).getChannel();
 
@@ -126,6 +124,14 @@ public class SimpleHttpClient {
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to download file: " + nextFile, ex);
         }
+    }
+
+    private Path resolvePath(final ServerManifest.ModFileData modFile) {
+        Path path = outputDir.resolve(modFile.fileName()).normalize();
+        if (!outputDir.equals(path.getParent())) {
+            throw new IllegalStateException("Requested file '" + modFile.fileName() + "' resolved to path outside of servermods directory");
+        }
+        return path;
     }
 
     private void downloadNextFile(final String server) throws IOException
