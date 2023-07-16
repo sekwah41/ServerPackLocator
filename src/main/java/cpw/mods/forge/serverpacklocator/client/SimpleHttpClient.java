@@ -1,11 +1,11 @@
 package cpw.mods.forge.serverpacklocator.client;
 
 import com.google.common.hash.HashCode;
+import com.mojang.serialization.DataResult;
 import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
-import net.minecraft.Util;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,7 +66,8 @@ public class SimpleHttpClient {
         var connection = url.openConnection();
 
         try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream())) {
-            this.serverManifest = Util.getOrThrow(ServerManifest.loadFromStream(in), error -> new IllegalStateException("Manifest was malformed: " + error));
+            DataResult<ServerManifest> result = ServerManifest.loadFromStream(in);
+            this.serverManifest = result.result().orElseThrow(() -> new IllegalStateException("Manifest was malformed: " + result.error().orElseThrow()));
         } catch (IOException e) {
             throw new IllegalStateException("Failed to download manifest", e);
         }
