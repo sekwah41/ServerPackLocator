@@ -1,43 +1,29 @@
 # Server Pack Locator
 
-One of a series of locator modules to allow Forge to find mods in different places.
+*Originally written by [cpw](https://github.com/cpw/serverpacklocator), ported over the years by [marchermans](https://github.com/marchermans/serverpacklocator), [baileyholl](https://github.com/baileyholl/serverpacklocator), and [gigabit101](https://github.com/gigabit101/serverpacklocator/)*
 
-This locator allows a properly configured client to retrieve mods from a properly configured server,
-potentially allowing for custom server builds without a lot of mod distribution hassle.
+## About
 
-## Trust
+Server Pack Locator is a module that allows you to easily keep the Forge Modpacks of Minecraft: Java Edition clients in sync with a server.  
+This is achieved by having SPL grab a manifest from a defined server, downloading any mods it doesn't have, and then passing the mods in the manifest along to be loaded.  
+  
+This fork of SPL is designed to not require authentication. This works great for public servers & servers where you don't care about mods being available, but if you want authentication then check out [cpw](https://github.com/cpw/serverpacklocator)'s or [marchermans](https://github.com/marchermans/serverpacklocator)' versions.
 
-Trust is established using the well known and well documented mechanisms of *mutual SSL*.
+## Setup
 
-Put simply, each side generates a secure key and gets the other to sign a secured certificate based on
-that key. If both present their secured certificates, the connection is allowed, if not, the connection
-is rejected.
+### Server
 
-## How the server works
+1. Drop serverpacklocator.jar into the `mods/` folder of your Forge server.
+2. Create a `servermods/` folder & put any mods you want SPL to handle in here  
+3. Update the config `servermods/serverpacklocator.toml`
 
-The server generates a certificate (called a "Certificate Authority") and associated private key. _Do not_ share or 
-delete this private key - without it, the "Certificate Authority" will not work.
+### Client
 
-It then creates a special, single purpose HTTP server using this certificate in "mutual SSL" mode. This means
-that only connections coming from clients bearing certificates signed by the "Certificate Authority" will
-be accepted. In addition, each client certificate's "Common Name" is checked against the current server
-whitelist (by UUID). Any Common Name not found on the whitelist will be disconnected. Note that the Common Name
-is cryptographically encoded by the server - it cannot be forged by the client.
+1. Drop serverpacklocator.jar into the `mods/` folder of your Forge instance.
+2. Put the SPL config at `servermods/serverpacklocator.toml`, pointing to the server's domain.
 
-Those connections that are allowed will be served a _manifest_ of current mods in the servermods directory. This
-manifest is "smart filtered" so only the latest (by version) of any modid will be served. The same list will also
-be offered to the server itself, ensuring overlapping mod lists on client and server.
+## Notes
 
-(Note that mods in the mods dir will be loaded as well, but are not offered in this way to clients. Use this for
-server-only mods)
- 
-## How the client works
-
-The client generates a private key and a CSR - "Certificate Signing Request". This request encodes the UUID of the client
-as launched by the game. This should be signed by the server administrator using the signing process below. In return
-the server administrator will supply you with a signed certificate. This should be placed next to the signing request and
-private key.
-
-The client then configures the server connection, and next time the client starts, it should fetch the current modlist
-from the server automatically - no further interaction required.   
-
+- You MUST use HTTPS with a valid TLS certificate. The cheapest (free) way to do this is setting up with Let's Encrypt & a domain from a Dynamic DNS provider.
+- Currently, SPL is unable to host its own HTTPS server. A config for Caddy has been included as a stopgap solution, but if you already have a webserver, point a subdomain to the `servermods/` folder.
+- Mods put into `servermods/` will be loaded on the Client AND the Server. Don't put any client-only or server-only mods in there!
