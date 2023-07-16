@@ -24,13 +24,12 @@ public class ServerSidedPackHandler extends SidedPackHandler
     @Override
     protected boolean validateConfig() {
         final OptionalInt port = getConfig().getOptionalInt("server.port");
-        final Optional<String> password = getConfig().getOptional("server.password");
 
-        if (port.isPresent() && password.isPresent()) {
+        if (port.isPresent()) {
             return true;
         } else {
             LOGGER.fatal("Invalid configuration file found: {}, please delete or correct before trying again", getConfig().getNioPath());
-            throw new IllegalStateException("Invalid configuation found");
+            throw new IllegalStateException("Invalid configuration found");
         }
     }
 
@@ -54,7 +53,7 @@ public class ServerSidedPackHandler extends SidedPackHandler
     @Override
     public void initialize(final IModLocator dirLocator) {
         serverFileManager = new ServerFileManager(this, getConfig().<List<String>>getOptional("server.excludedModIds").orElse(Collections.emptyList()));
-        SimpleHttpServer.run(this, getConfig().get("server.password"));
+        SimpleHttpServer.run(this);
     }
 
     public ServerFileManager getFileManager() {

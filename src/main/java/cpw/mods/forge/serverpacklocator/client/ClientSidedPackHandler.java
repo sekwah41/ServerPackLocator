@@ -40,18 +40,11 @@ public class ClientSidedPackHandler extends SidedPackHandler {
             return false;
         }
         final Optional<String> remoteServer = getConfig().getOptional("client.remoteServer");
-        final Optional<String> password = getConfig().getOptional("client.password");
 
         if (remoteServer.isEmpty()) {
             LOGGER.fatal("Invalid configuration file {} found. Could not locate remove server address. " +
                     "Repair or delete this file to continue", getConfig().getNioPath().toString());
             throw new IllegalStateException("Invalid configuation file found, please delete or correct");
-        }
-
-        if (password.isEmpty()) {
-            LOGGER.fatal("Invalid configuration file {} found. Could not locate server password. " +
-                           "Repair or delete this file to continue", getConfig().getNioPath().toString());
-            throw new IllegalStateException("Invalid configuration file found, please delete or correct");
         }
 
         return true;
@@ -88,7 +81,6 @@ public class ClientSidedPackHandler extends SidedPackHandler {
     public void initialize(final IModLocator dirLocator) {
         clientDownloader = new SimpleHttpClient(
           this,
-          getConfig().get("client.password"),
           getConfig().<List<String>>getOptional("client.excludedModIds").orElse(Collections.emptyList())
           );
     }

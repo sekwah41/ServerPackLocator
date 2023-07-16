@@ -34,28 +34,11 @@ public class SimpleHttpClient {
     private ServerManifest serverManifest;
     private Iterator<ServerManifest.ModFileData> fileDownloaderIterator;
     private final Future<Boolean> downloadJob;
-    private final String       passwordHash;
     private final List<String> excludedModIds;
 
-    public SimpleHttpClient(final ClientSidedPackHandler packHandler, final String password, final List<String> excludedModIds) {
+    public SimpleHttpClient(final ClientSidedPackHandler packHandler, final List<String> excludedModIds) {
         this.outputDir = packHandler.getServerModsDir();
         this.excludedModIds = excludedModIds;
-
-        try
-        {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(password.getBytes());
-            byte[] digest = md.digest();
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest) {
-                sb.append(Integer.toHexString(b & 0xff));
-            }
-            this.passwordHash = sb.toString().toUpperCase(Locale.ROOT);
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new IllegalStateException("Missing MD5 hashing algorithm", e);
-        }
 
         final Optional<String> remoteServer = packHandler.getConfig().getOptional("client.remoteServer");
         downloadJob = Executors.newSingleThreadExecutor().submit(() -> remoteServer
@@ -83,7 +66,6 @@ public class SimpleHttpClient {
 
         var url = new URL(address);
         var connection = url.openConnection();
-        connection.setRequestProperty("Authentication", this.passwordHash);
 
         try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream())) {
             this.serverManifest = Util.getOrThrow(ServerManifest.loadFromStream(in), error -> new IllegalStateException("Manifest was malformed: " + error));
@@ -114,7 +96,6 @@ public class SimpleHttpClient {
         try
         {
             URLConnection connection = new URL(requestUri).openConnection();
-            connection.setRequestProperty("Authentication", this.passwordHash);
 
             File file = outputDir.resolve(next.fileName()).toFile();
 

@@ -24,26 +24,9 @@ import java.util.stream.Collectors;
 class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     private final ServerSidedPackHandler serverSidedPackHandler;
     private static final Logger LOGGER = LogManager.getLogger();
-    private final String passwordHash;
 
-    RequestHandler(final ServerSidedPackHandler serverSidedPackHandler, final String password) {
+    RequestHandler(final ServerSidedPackHandler serverSidedPackHandler) {
         this.serverSidedPackHandler = serverSidedPackHandler;
-
-        try
-        {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(password.getBytes());
-            byte[] digest = md.digest();
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest) {
-                sb.append(Integer.toHexString(b & 0xff));
-            }
-            this.passwordHash = sb.toString().toUpperCase(Locale.ROOT);
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new IllegalStateException("Missing MD5 hashing algorithm", e);
-        }
     }
 
     @Override
@@ -54,29 +37,16 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             buildReply(ctx, msg, HttpResponseStatus.BAD_REQUEST, "text/plain", "Bad request");
         }
     }
+
     private void handleGet(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
         LOGGER.info(msg.headers());
-        if (!msg.headers().contains("Authentication")) {
-            LOGGER.warn("Received unauthenticated request.");
-            build404(ctx, msg);
-            return;
-        }
-
-        var hash = msg.headers().get("Authentication");
-        LOGGER.info(hash);
-        LOGGER.info(this.passwordHash);
-        if (!hash.equals(this.passwordHash)) {
-            LOGGER.warn("Received unauthorized request.");
-            build404(ctx, msg);
-            return;
-        }
 
         if (Objects.equals("/servermanifest.json", msg.uri())) {
             LOGGER.info("Manifest request for client {}", determineClientIp(ctx, msg));
             final String s = serverSidedPackHandler.getFileManager().buildManifest();
             buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
         } else if (msg.uri().startsWith("/files/")) {
-            String fileName = LamdbaExceptionUtils.uncheck(()->URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8.name()));
+            String fileName = LamdbaExceptionUtils.uncheck(() -> URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8));
             byte[] file = serverSidedPackHandler.getFileManager().findFile(fileName);
             if (file == null) {
                 LOGGER.debug("Requested file {} not found", fileName);
