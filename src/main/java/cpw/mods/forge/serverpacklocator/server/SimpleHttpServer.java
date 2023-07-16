@@ -12,36 +12,34 @@ import io.netty.handler.codec.http.HttpServerCodec;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
  * Simple Http Server for serving file and manifest requests to clients.
  */
 public class SimpleHttpServer {
     private static final Logger LOGGER = LogManager.getLogger();
+    private static final NioEventLoopGroup PARENT_GROUP = new NioEventLoopGroup(1, new ThreadFactoryBuilder()
+            .setNameFormat("ServerPack Locator Parent - %d")
+            .setDaemon(true)
+            .build());
+    private static final NioEventLoopGroup CHILD_GROUP = new NioEventLoopGroup(1, new ThreadFactoryBuilder()
+            .setNameFormat("ServerPack Locator Child - %d")
+            .setDaemon(true)
+            .build());
+
+    private static final int MAX_CONTENT_LENGTH = 2 << 19;
 
     private SimpleHttpServer() {
         throw new IllegalArgumentException("Can not instantiate SimpleHttpServer.");
     }
 
-    public static void run(ServerSidedPackHandler handler) {
-        EventLoopGroup masterGroup = new NioEventLoopGroup(1, new ThreadFactoryBuilder()
-                .setNameFormat("ServerPack Locator Master - %d")
-                .setDaemon(true)
-                .build());
-        EventLoopGroup slaveGroup = new NioEventLoopGroup(1,new ThreadFactoryBuilder()
-                .setNameFormat("ServerPack Locator Slave - %d")
-                .setDaemon(true)
-                .build());
-
-        int port = handler.getConfig().getOptionalInt("server.port").orElse(8443);
+    public static void run(final ServerFileManager fileManager, final int port) {
         final ServerBootstrap bootstrap = new ServerBootstrap()
-                .group(masterGroup, slaveGroup)
+                .group(PARENT_GROUP, CHILD_GROUP)
                 .channel(NioServerSocketChannel.class)
                 .handler(new ChannelInitializer<ServerSocketChannel>() {
                     @Override
-                    protected void initChannel(final ServerSocketChannel ch) {
-                        ch.pipeline().addLast(new ChannelInboundHandlerAdapter() {
+                    protected void initChannel(final ServerSocketChannel channel) {
+                        channel.pipeline().addLast(new ChannelInboundHandlerAdapter() {
                             @Override
                             public void channelActive(final ChannelHandlerContext ctx) {
                                 LOGGER.info("ServerPack server active on port {}", port);
@@ -51,10 +49,10 @@ public class SimpleHttpServer {
                 })
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
-                    protected void initChannel(final SocketChannel ch) {
-                        ch.pipeline().addLast("codec", new HttpServerCodec());
-                        ch.pipeline().addLast("aggregator", new HttpObjectAggregator(2 << 19));
-                        ch.pipeline().addLast("request", new RequestHandler(handler));
+                    protected void initChannel(final SocketChannel channel) {
+                        channel.pipeline().addLast("codec", new HttpServerCodec());
+                        channel.pipeline().addLast("aggregator", new HttpObjectAggregator(MAX_CONTENT_LENGTH));
+                        channel.pipeline().addLast("request", new RequestHandler(fileManager));
                     }
                 })
                 .option(ChannelOption.SO_BACKLOG, 128)

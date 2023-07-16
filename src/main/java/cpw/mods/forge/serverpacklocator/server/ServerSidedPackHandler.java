@@ -12,8 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-public class ServerSidedPackHandler extends SidedPackHandler
-{
+public class ServerSidedPackHandler extends SidedPackHandler {
     private static final Logger LOGGER = LogManager.getLogger();
     private ServerFileManager serverFileManager;
 
@@ -52,11 +51,9 @@ public class ServerSidedPackHandler extends SidedPackHandler
 
     @Override
     public void initialize(final IModLocator dirLocator) {
-        serverFileManager = new ServerFileManager(this, getConfig().<List<String>>getOptional("server.excludedModIds").orElse(Collections.emptyList()));
-        SimpleHttpServer.run(this);
-    }
-
-    public ServerFileManager getFileManager() {
-        return serverFileManager;
+        int port = getConfig().getOptionalInt("server.port").orElse(8443);
+        List<String> excludedModIds = getConfig().<List<String>>getOptional("server.excludedModIds").orElse(List.of());
+        serverFileManager = new ServerFileManager(this, excludedModIds);
+        SimpleHttpServer.run(serverFileManager, port);
     }
 }

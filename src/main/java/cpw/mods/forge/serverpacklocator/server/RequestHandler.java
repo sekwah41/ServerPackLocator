@@ -8,25 +8,19 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.codehaus.plexus.util.Base64;
 
 import javax.net.ssl.SSLException;
-import java.net.SocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Locale;
 import java.util.Objects;
-import java.util.function.LongFunction;
-import java.util.stream.Collectors;
 
 class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
-    private final ServerSidedPackHandler serverSidedPackHandler;
     private static final Logger LOGGER = LogManager.getLogger();
 
-    RequestHandler(final ServerSidedPackHandler serverSidedPackHandler) {
-        this.serverSidedPackHandler = serverSidedPackHandler;
+    private final ServerFileManager serverFileManager;
+
+    RequestHandler(final ServerFileManager serverFileManager) {
+        this.serverFileManager = serverFileManager;
     }
 
     @Override
@@ -43,11 +37,11 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
         if (Objects.equals("/servermanifest.json", msg.uri())) {
             LOGGER.info("Manifest request for client {}", determineClientIp(ctx, msg));
-            final String s = serverSidedPackHandler.getFileManager().buildManifest();
-            buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
+            final String manifest = serverFileManager.buildManifest();
+            buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", manifest);
         } else if (msg.uri().startsWith("/files/")) {
             String fileName = LamdbaExceptionUtils.uncheck(() -> URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8));
-            byte[] file = serverSidedPackHandler.getFileManager().findFile(fileName);
+            byte[] file = serverFileManager.findFile(fileName);
             if (file == null) {
                 LOGGER.debug("Requested file {} not found", fileName);
                 build404(ctx, msg);
