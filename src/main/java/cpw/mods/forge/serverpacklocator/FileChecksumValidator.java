@@ -18,6 +18,9 @@ public class FileChecksumValidator {
 
     @Nullable
     public static HashCode computeChecksumFor(Path file) {
+        if (!Files.exists(file)) {
+            return null;
+        }
         Hasher hasher = Hashing.sha256().newHasher();
         ByteBuffer buffer = ByteBuffer.allocate(1024);
         try (SeekableByteChannel channel = Files.newByteChannel(file)) {
