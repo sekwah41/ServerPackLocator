@@ -1,6 +1,7 @@
 package cpw.mods.forge.serverpacklocator.server;
 
 import com.google.common.hash.HashCode;
+import cpw.mods.forge.serverpacklocator.DirHandler;
 import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
@@ -50,8 +51,8 @@ public class ServerFileManager {
     @Nullable
     byte[] findFile(final String fileName) {
         try {
-            Path path = modsDir.resolve(fileName).normalize();
-            if (!modsDir.equals(path.getParent())) {
+            final Path path = DirHandler.resolveDirectChild(modsDir, fileName);
+            if (path == null) {
                 LOGGER.warn("Requested mod file not in servermods directory: {}", fileName);
                 return null;
             }

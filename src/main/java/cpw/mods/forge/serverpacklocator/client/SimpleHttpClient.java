@@ -4,6 +4,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.hash.HashCode;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.mojang.serialization.DataResult;
+import cpw.mods.forge.serverpacklocator.DirHandler;
 import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
@@ -110,8 +111,8 @@ public class SimpleHttpClient {
     }
 
     private Path resolvePath(final ServerManifest.ModFileData modFile) {
-        Path path = outputDir.resolve(modFile.fileName()).normalize();
-        if (!outputDir.equals(path.getParent())) {
+        final Path path = DirHandler.resolveDirectChild(outputDir, modFile.fileName());
+        if (path == null) {
             throw new IllegalStateException("Requested file '" + modFile.fileName() + "' resolved to path outside of servermods directory");
         }
         return path;

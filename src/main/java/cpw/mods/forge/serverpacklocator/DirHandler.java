@@ -1,5 +1,6 @@
 package cpw.mods.forge.serverpacklocator;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -27,5 +28,20 @@ public class DirHandler {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    @Nullable
+    public static Path resolveDirectChild(final Path root, final String name) {
+        final Path file = Path.of(name);
+        if (file.getNameCount() != 1) {
+            return null;
+        }
+        return switch (file.getFileName().toString()) {
+            case "..", "." -> null;
+            default -> {
+                final Path path = root.resolve(file);
+                yield path.getParent().equals(root) ? path : null;
+            }
+        };
     }
 }
