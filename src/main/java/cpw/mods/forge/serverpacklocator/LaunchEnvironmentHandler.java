@@ -35,7 +35,7 @@ public class LaunchEnvironmentHandler {
         return getValue(net.minecraftforge.forgespi.Environment.Keys.DIST).orElse(Dist.CLIENT);
     }
 
-    IModDirectoryLocatorFactory getModFolderFactory() {
+    public IModDirectoryLocatorFactory getModFolderFactory() {
         return getValue(net.minecraftforge.forgespi.Environment.Keys.MODDIRECTORYFACTORY).orElseThrow(()->new IllegalStateException("Missing MODDIRECTORYFACTORY, wut?"));
     }
 

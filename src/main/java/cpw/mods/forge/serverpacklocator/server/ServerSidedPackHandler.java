@@ -2,9 +2,12 @@ package cpw.mods.forge.serverpacklocator.server;
 
 import com.electronwill.nightconfig.core.ConfigFormat;
 import com.electronwill.nightconfig.core.file.FileConfig;
+import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
+import cpw.mods.forge.serverpacklocator.PackBuilder;
 import cpw.mods.forge.serverpacklocator.SidedPackHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import net.minecraftforge.forgespi.locating.IModDirectoryLocatorFactory;
 import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
 import org.apache.logging.log4j.LogManager;
@@ -16,13 +19,22 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.function.Consumer;
 
 public class ServerSidedPackHandler extends SidedPackHandler {
     private static final Logger LOGGER = LogManager.getLogger();
+    private final Path clientModsDir;
     private ServerFileManager serverFileManager;
 
-    public ServerSidedPackHandler(final Path serverModsDir) {
+    private Set<String> excludedModIds = Set.of();
+    @Nullable
+    private IModLocator serverModLocator;
+    @Nullable
+    private IModLocator clientModLocator;
+
+    public ServerSidedPackHandler(final Path serverModsDir, final Path clientModsDir) {
         super(serverModsDir);
+        this.clientModsDir = clientModsDir;
     }
 
     @Override
@@ -44,24 +56,63 @@ public class ServerSidedPackHandler extends SidedPackHandler {
     }
 
     @Override
-    protected boolean waitForDownload() {
-        return true;
+    public List<ModFileOrException> scanMods() {
+        if (serverModLocator == null || clientModLocator == null) {
+            throw new IllegalArgumentException("Pack locator has not been initialized");
+        }
+
+        final PackBuilder packBuilder = new PackBuilder(excludedModIds);
+
+        final List<ModFileOrException> result = new ArrayList<>();
+        final List<IModFile> combinedPack = new ArrayList<>();
+        final List<IModFile> serverPack = new ArrayList<>();
+
+        for (final ModFileOrException mod : serverModLocator.scanMods()) {
+            if (mod.file() != null) {
+                serverPack.add(mod.file());
+                combinedPack.add(mod.file());
+            } else if (mod.ex() != null) {
+                result.add(mod);
+            }
+        }
+        for (final ModFileOrException mod : clientModLocator.scanMods()) {
+            if (mod.file() != null) {
+                combinedPack.add(mod.file());
+            } else if (mod.ex() != null) {
+                result.add(mod);
+            }
+        }
+
+        serverFileManager.buildManifest(packBuilder.buildModList(combinedPack));
+
+        for (final IModFile file : packBuilder.buildModList(serverPack)) {
+            result.add(new ModFileOrException(file, null));
+        }
+
+        return result;
     }
 
     @Override
-    protected List<IModFile> processModList(List<IModFile> scannedMods) {
-        serverFileManager.handleModList(scannedMods);
-        return serverFileManager.getModList();
-    }
+    public void initArguments(final Map<String, ?> arguments) {
+        final IModDirectoryLocatorFactory locatorFactory = LaunchEnvironmentHandler.INSTANCE.getModFolderFactory();
+        serverModLocator = locatorFactory.build(serverModsDir, "serverpack");
+        clientModLocator = locatorFactory.build(clientModsDir, "clientpack");
 
-    @Override
-    public void initialize(final IModLocator dirLocator) {
-        FileConfig config = getConfig();
-        int port = config.getOptionalInt("server.port").orElse(8443);
-        List<String> excludedModIds = config.<List<String>>getOptional("server.excludedModIds").orElse(List.of());
-        SslContext sslContext = buildSslContext(config.get("server.ssl.certificateChainFile"), config.get("server.ssl.keyFile"));
+        if (!isValid()) {
+            return;
+        }
 
-        serverFileManager = new ServerFileManager(this, excludedModIds);
+        final FileConfig config = getConfig();
+        final int port = config.getOptionalInt("server.port").orElse(8443);
+        excludedModIds = Set.copyOf(config.<List<String>>getOptional("server.excludedModIds").orElse(List.of()));
+
+        final SslContext sslContext = buildSslContext(config.get("server.ssl.certificateChainFile"), config.get("server.ssl.keyFile"));
+
+        final Path manifestPath = serverModsDir.resolve("servermanifest.json");
+        final List<Path> modRoots = List.of(serverModsDir, clientModsDir);
+        final String forgeVersion = arguments.get("mcVersion") + "-" + arguments.get("forgeVersion");
+        serverFileManager = new ServerFileManager(manifestPath, modRoots, forgeVersion);
+
         SimpleHttpServer.run(serverFileManager, port, sslContext);
     }
 
@@ -79,5 +130,22 @@ public class ServerSidedPackHandler extends SidedPackHandler {
             LOGGER.error("Failed to initialize SSL context for server", e);
         }
         return null;
+    }
+
+    @Override
+    public void scanFile(final IModFile modFile, final Consumer<Path> pathConsumer) {
+        if (serverModLocator != null) {
+            serverModLocator.scanFile(modFile, pathConsumer);
+        }
+    }
+
+    @Override
+    public boolean isValid(final IModFile modFile) {
+        return serverModLocator != null && serverModLocator.isValid(modFile);
+    }
+
+    @Override
+    public String name() {
+        return "serverpacklocator";
     }
 }

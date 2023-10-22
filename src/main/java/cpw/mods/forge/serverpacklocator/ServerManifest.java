@@ -47,7 +47,7 @@ public record ServerManifest(String forgeVersion, List<ModFileData> files) {
     }
 
     public void save(final Path path) {
-        try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+        try (final BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
             writer.write(toJson());
         } catch (IOException e) {
             throw new UncheckedIOException(e);

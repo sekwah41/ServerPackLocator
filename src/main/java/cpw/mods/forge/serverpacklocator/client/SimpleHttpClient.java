@@ -40,8 +40,8 @@ public class SimpleHttpClient {
     private final CompletableFuture<ServerManifest> downloadJob;
     private final Set<String> excludedModIds;
 
-    public SimpleHttpClient(final ClientSidedPackHandler packHandler, final Set<String> excludedModIds) {
-        this.outputDir = packHandler.getServerModsDir();
+    public SimpleHttpClient(final ClientSidedPackHandler packHandler, final Set<String> excludedModIds, final Path outputDir) {
+        this.outputDir = outputDir;
         this.excludedModIds = excludedModIds;
 
         final Optional<String> remoteServer = packHandler.getConfig().<String>getOptional("client.remoteServer")
