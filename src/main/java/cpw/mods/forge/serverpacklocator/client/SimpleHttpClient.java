@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
+import java.nio.file.Files;
+import java.io.IOException;
 
 public class SimpleHttpClient {
     private static final Logger LOGGER = LogManager.getLogger();
@@ -95,6 +97,14 @@ public class SimpleHttpClient {
         if (Objects.equals(modFile.checksum(), existingChecksum)) {
             LOGGER.debug("Found existing file {} - skipping", modFile.fileName());
             return CompletableFuture.completedFuture(null);
+        }
+
+        try {
+            Files.deleteIfExists(targetPath);
+            LOGGER.info("Deleted old file: {}", modFile.fileName());
+        } catch (IOException e) {
+            LOGGER.error("Failed to delete old file: {}", modFile.fileName(), e);
+            return CompletableFuture.failedFuture(e);
         }
 
         final String fileName = modFile.fileName();
